@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/db.ts","./src/main.tsx","./src/pages/editor.tsx","./src/pages/list.tsx","./src/pages/preview.tsx","./src/utils/geo.ts","./src/utils/scheduler.ts"],"version":"5.9.3"}
