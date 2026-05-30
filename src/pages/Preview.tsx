@@ -39,7 +39,9 @@ export const Preview: React.FC<Props> = ({ id, onBack }) => {
     const json = JSON.stringify(it);
     const hash = btoa(encodeURIComponent(json));
     const url = `${window.location.origin}${window.location.pathname}#share=${hash}`;
-    navigator.clipboard.writeText(url).then(() => alert('行程連結已複製！'));
+    navigator.clipboard.writeText(url)
+      .then(() => alert('行程連結已複製！'))
+      .catch(() => alert('複製失敗，請手動複製：' + url));
   };
 
   const handleDelayCalculated = (result: ReturnType<typeof recalculateFromDelay>) => {
@@ -285,7 +287,7 @@ function DelayModal({
 
   const handleCalculate = () => {
     const now = new Date();
-    const timeStr = customTime || `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const timeStr = customTime || new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Taipei', hour: '2-digit', minute: '2-digit', hour12: false }).format(now);
 
     // Current position = last completed spot, or start point if none
     let currentLat = 0;

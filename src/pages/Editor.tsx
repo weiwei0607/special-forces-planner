@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { db, type Itinerary, type Spot, generateId } from '../db';
 import { buildSchedule, suggestDropOrder } from '../utils/scheduler';
 import { ArrowLeft, Plus, Trash2, GripVertical, AlertTriangle, Footprints, Clock, DollarSign, Zap, Clock3 } from 'lucide-react';
@@ -13,7 +13,7 @@ const emptyItinerary = (): Itinerary => ({
   id: generateId(),
   title: '未命名行程',
   city: '',
-  date: new Date().toISOString().slice(0, 10),
+  date: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date()),
   startTime: '09:00',
   endTime: '21:00',
   spots: [],
@@ -56,7 +56,7 @@ export const Editor: React.FC<Props> = ({ id, onBack, onPreview }) => {
   const updateField = useCallback(<K extends keyof Itinerary>(key: K, value: Itinerary[K]) => {
     setIt(prev => {
       const next = { ...prev, [key]: value, updatedAt: Date.now() };
-      db.itineraries.put(next);
+      db.itineraries.put(next).catch(console.error);
       return next;
     });
   }, []);
@@ -88,7 +88,11 @@ export const Editor: React.FC<Props> = ({ id, onBack, onPreview }) => {
     save(next);
   }, [it, save]);
 
-  const result = it.plan.length > 0 ? buildSchedule(it.spots, it.startTime, it.endTime, it.transportMode, it.intensity) : null;
+  const result = useMemo(
+    () => it.plan.length > 0 ? buildSchedule(it.spots, it.startTime, it.endTime, it.transportMode, it.intensity) : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [it.plan.length, it.spots, it.startTime, it.endTime, it.transportMode, it.intensity]
+  );
 
   return (
     <div className="min-h-screen p-6">
