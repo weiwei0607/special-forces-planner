@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react';
 import { db, type Itinerary } from '../db';
 import { recalculateFromDelay } from '../utils/scheduler';
-import { ArrowLeft, MapPin, Clock, AlertTriangle, CheckCircle2, DollarSign, Share2, User, RefreshCw, X, Navigation } from 'lucide-react';
+import { haversineKm } from '../utils/geo';
+import { MapView } from '../components/MapView';
+import {
+  ArrowLeft, MapPin, Clock, AlertTriangle, CheckCircle2, DollarSign, Share2, User,
+  RefreshCw, X, Navigation
+} from 'lucide-react';
 
 interface Props {
   id: string;
@@ -13,6 +18,7 @@ export const Preview: React.FC<Props> = ({ id, onBack }) => {
   const [showDelayModal, setShowDelayModal] = useState(false);
   const [delayResult, setDelayResult] = useState<ReturnType<typeof recalculateFromDelay> | null>(null);
   const [activePlan, setActivePlan] = useState<'original' | 'planb'>('original');
+  const [selectedSpotId, setSelectedSpotId] = useState<string | null>(null);
 
   useEffect(() => {
     db.itineraries.get(id).then(data => setIt(data ?? null));
@@ -49,6 +55,14 @@ export const Preview: React.FC<Props> = ({ id, onBack }) => {
     setActivePlan('planb');
     setShowDelayModal(false);
   };
+
+  const totalWalkKmOriginal = it.plan.reduce((sum, p, i) => {
+    if (i === 0 || p.travelMode !== 'walk') return sum;
+    const prev = it.spots.find(s => s.id === it.plan[i - 1].spotId);
+    const cur = it.spots.find(s => s.id === p.spotId);
+    if (!prev || !cur) return sum;
+    return sum + haversineKm(prev.lat, prev.lng, cur.lat, cur.lng) * 1.4;
+  }, 0);
 
   return (
     <div className="min-h-screen p-6">
@@ -104,6 +118,25 @@ export const Preview: React.FC<Props> = ({ id, onBack }) => {
       </header>
 
       <main className="max-w-2xl mx-auto space-y-4">
+        {/* Map */}
+        {currentSpots.length > 0 && (
+          <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                <MapPin className="w-4 h-4" /> 路線地圖
+              </h3>
+              <span className="text-xs text-zinc-600">點擊時間軸項目可定位</span>
+            </div>
+            <MapView
+              spots={currentSpots}
+              plan={currentPlan.length > 0 ? currentPlan : undefined}
+              selectedSpotId={selectedSpotId}
+              onSelectSpot={id => setSelectedSpotId(id === selectedSpotId ? null : id)}
+              height="280px"
+            />
+          </div>
+        )}
+
         {/* Warnings for Plan B */}
         {delayResult && activePlan === 'planb' && delayResult.warnings.length > 0 && (
           <div className="bg-orange-500/5 border border-orange-500/20 rounded-2xl p-4 space-y-2">
@@ -142,6 +175,7 @@ export const Preview: React.FC<Props> = ({ id, onBack }) => {
                 const spot = currentSpots.find(s => s.id === p.spotId);
                 if (!spot) return null;
                 const originalIdx = it.spots.findIndex(s => s.id === p.spotId);
+                const isSelected = selectedSpotId === spot.id;
 
                 return (
                   <div key={p.spotId}>
@@ -159,7 +193,13 @@ export const Preview: React.FC<Props> = ({ id, onBack }) => {
                       </div>
                     )}
 
-                    <div className="flex items-start gap-4 py-3">
+                    <div
+                      onClick={() => setSelectedSpotId(isSelected ? null : spot.id)}
+                      className={[
+                        'flex items-start gap-4 py-3 rounded-xl px-2 -mx-2 cursor-pointer transition-colors',
+                        isSelected ? 'bg-brand-light/5' : 'hover:bg-zinc-900/50',
+                      ].join(' ')}
+                    >
                       <div className="relative z-10 w-[54px] text-right shrink-0">
                         <span className="text-xs font-mono text-brand-light font-bold">{p.arrivalTime}</span>
                         <p className="text-[10px] text-zinc-600 mt-0.5">{p.departureTime} 離開</p>
@@ -177,7 +217,7 @@ export const Preview: React.FC<Props> = ({ id, onBack }) => {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <p className="text-sm font-bold text-zinc-100">{spot.name}</p>
+                            <p className={`text-sm font-bold ${isSelected ? 'text-brand-light' : 'text-zinc-100'}`}>{spot.name}</p>
                             <div className="flex items-center gap-2 text-[11px] text-zinc-500 mt-0.5">
                               <span>停留 {spot.durationMin} 分鐘</span>
                               {spot.price > 0 && <span className="flex items-center gap-0.5"><DollarSign className="w-3 h-3" />${spot.price}</span>}
@@ -236,14 +276,7 @@ export const Preview: React.FC<Props> = ({ id, onBack }) => {
                 <p className="text-[10px] text-zinc-500 uppercase">總步行距離</p>
                 <p className="text-xl font-black text-zinc-100">
                   {activePlan === 'original'
-                    ? it.plan.reduce((sum, p, i) => {
-                        if (i === 0 || p.travelMode !== 'walk') return sum;
-                        const prev = it.spots.find(s => s.id === it.plan[i - 1].spotId);
-                        const cur = it.spots.find(s => s.id === p.spotId);
-                        if (!prev || !cur) return sum;
-                        const d = Math.sqrt(Math.pow(prev.lat - cur.lat, 2) + Math.pow(prev.lng - cur.lng, 2)) * 111;
-                        return sum + d * 1.4;
-                      }, 0).toFixed(1)
+                    ? totalWalkKmOriginal.toFixed(1)
                     : delayResult?.totalWalkKm.toFixed(1) ?? '0.0'}
                   <span className="text-xs font-medium text-zinc-500"> km</span>
                 </p>
@@ -289,7 +322,6 @@ function DelayModal({
     const now = new Date();
     const timeStr = customTime || new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Taipei', hour: '2-digit', minute: '2-digit', hour12: false }).format(now);
 
-    // Current position = last completed spot, or start point if none
     let currentLat = 0;
     let currentLng = 0;
     if (completedCount > 0) {

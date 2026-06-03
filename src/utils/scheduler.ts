@@ -16,6 +16,84 @@ const INTENSITY_LIMITS: Record<Intensity, { maxSpots: number; maxWalkKm: number;
   hard: { maxSpots: 12, maxWalkKm: 20, maxActiveHours: 14 },
 };
 
+function routeDistance(order: number[], spots: Spot[], startLat?: number, startLng?: number): number {
+  let dist = 0;
+  let lat = startLat ?? spots[order[0]]?.lat ?? 0;
+  let lng = startLng ?? spots[order[0]]?.lng ?? 0;
+  for (const idx of order) {
+    dist += haversineKm(lat, lng, spots[idx].lat, spots[idx].lng);
+    lat = spots[idx].lat;
+    lng = spots[idx].lng;
+  }
+  return dist;
+}
+
+function twoOpt(
+  spots: Spot[],
+  initialOrder: number[],
+  startLat?: number,
+  startLng?: number
+): number[] {
+  let order = [...initialOrder];
+  let improved = true;
+  let iterations = 0;
+  const maxIterations = 500;
+
+  while (improved && iterations < maxIterations) {
+    improved = false;
+    iterations++;
+    for (let i = 0; i < order.length - 1; i++) {
+      for (let j = i + 1; j < order.length; j++) {
+        const newOrder = [...order];
+        // Reverse segment [i, j]
+        const segment = newOrder.slice(i, j + 1).reverse();
+        newOrder.splice(i, segment.length, ...segment);
+
+        const oldDist = routeDistance(order, spots, startLat, startLng);
+        const newDist = routeDistance(newOrder, spots, startLat, startLng);
+
+        if (newDist < oldDist - 0.001) {
+          order = newOrder;
+          improved = true;
+        }
+      }
+    }
+  }
+  return order;
+}
+
+function buildNearestNeighborOrder(
+  spots: Spot[],
+  startLat?: number,
+  startLng?: number
+): number[] {
+  const unvisited = new Set(spots.map((_s, i) => i));
+  const order: number[] = [];
+  let currentLat = startLat ?? spots[0]?.lat ?? 0;
+  let currentLng = startLng ?? spots[0]?.lng ?? 0;
+
+  while (unvisited.size > 0) {
+    let bestIdx = -1;
+    let bestDist = Infinity;
+
+    for (const idx of unvisited) {
+      const dist = haversineKm(currentLat, currentLng, spots[idx].lat, spots[idx].lng);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = idx;
+      }
+    }
+
+    if (bestIdx === -1) break;
+    order.push(bestIdx);
+    unvisited.delete(bestIdx);
+    currentLat = spots[bestIdx].lat;
+    currentLng = spots[bestIdx].lng;
+  }
+
+  return order;
+}
+
 export function buildSchedule(
   spots: Spot[],
   startTime: string,
@@ -35,33 +113,12 @@ export function buildSchedule(
   let totalTransitMin = 0;
   let totalCost = 0;
 
-  // Greedy TSP: start from start point (or first spot), always pick nearest feasible spot
-  const unvisited = new Set(spots.map((_s, i) => i));
-  const order: number[] = [];
-  let currentLat = startLat ?? spots[0].lat;
-  let currentLng = startLng ?? spots[0].lng;
+  // 1. Nearest-neighbor greedy initialization
+  let order = buildNearestNeighborOrder(spots, startLat, startLng);
 
-  while (unvisited.size > 0) {
-    let bestIdx = -1;
-    let bestScore = Infinity;
-
-    for (const idx of unvisited) {
-      const spotItem = spots[idx];
-      const dist = haversineKm(currentLat, currentLng, spotItem.lat, spotItem.lng);
-      const travelMin = estimateTravelTimeMin(dist, transportMode);
-      // Score: prefer closer + cheaper
-      const score = dist * 10 + spotItem.durationMin * 0.5 + travelMin;
-      if (score < bestScore) {
-        bestScore = score;
-        bestIdx = idx;
-      }
-    }
-
-    if (bestIdx === -1) break;
-    order.push(bestIdx);
-    unvisited.delete(bestIdx);
-    currentLat = spots[bestIdx].lat;
-    currentLng = spots[bestIdx].lng;
+  // 2. 2-opt local search improvement (for routes with 3+ spots)
+  if (order.length >= 3) {
+    order = twoOpt(spots, order, startLat, startLng);
   }
 
   // Build timeline
@@ -146,6 +203,20 @@ export function buildSchedule(
 
   const feasible = plan.every(p => !p.warning);
   return { plan, totalWalkKm, totalTransitMin, totalCost, warnings, feasible };
+}
+
+export async function buildScheduleAsync(
+  spots: Spot[],
+  startTime: string,
+  endTime: string,
+  transportMode: 'walk' | 'transit' | 'drive',
+  intensity: Intensity,
+  startLat?: number,
+  startLng?: number
+): Promise<ScheduleResult> {
+  // Yield to event loop so UI can show loading state
+  await new Promise(r => setTimeout(r, 10));
+  return buildSchedule(spots, startTime, endTime, transportMode, intensity, startLat, startLng);
 }
 
 export function recalculateFromDelay(
