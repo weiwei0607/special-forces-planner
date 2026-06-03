@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { db, type Itinerary } from '../db';
-import { MapPin, Plus, Calendar, Users, Zap, ChevronRight, Trash2, Share2, FolderOpen, ChevronDown } from 'lucide-react';
+import { db, type Itinerary, type Spot, generateId } from '../db';
+import { MapPin, Plus, Calendar, Users, Zap, ChevronRight, Trash2, Share2, FolderOpen, ChevronDown, Sparkles, Loader2, Key } from 'lucide-react';
+import { generateItinerary, getGroqKey, saveGroqKey } from '../utils/groq';
 
 interface Props {
   onNew: () => void;
@@ -11,6 +12,16 @@ interface Props {
 export const List: React.FC<Props> = ({ onNew, onOpen, onPreview }) => {
   const [itineraries, setItineraries] = useState<Itinerary[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  // AI Modal state
+  const [showAIModal, setShowAIModal] = useState(false);
+  const [aiDestination, setAiDestination] = useState('');
+  const [aiDays, setAiDays] = useState(3);
+  const [aiBudget, setAiBudget] = useState<'free' | 'mid' | 'any'>('mid');
+  const [aiStyle, setAiStyle] = useState<'hard' | 'medium'>('hard');
+  const [aiApiKey, setAiApiKey] = useState(getGroqKey());
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
 
   useEffect(() => {
     load();
@@ -33,6 +44,91 @@ export const List: React.FC<Props> = ({ onNew, onOpen, onPreview }) => {
     const url = `${window.location.origin}${window.location.pathname}#share=${hash}`;
     navigator.clipboard.writeText(url).then(() => alert('行程連結已複製！'));
   };
+
+  async function handleAIGenerate() {
+    if (!aiDestination.trim()) {
+      setAiError('請輸入目的地');
+      return;
+    }
+    if (!aiApiKey.trim()) {
+      setAiError('請輸入 Groq API Key');
+      return;
+    }
+    setAiError('');
+    setAiLoading(true);
+    saveGroqKey(aiApiKey);
+
+    try {
+      const days = await generateItinerary({
+        destination: aiDestination.trim(),
+        days: aiDays,
+        budget: aiBudget,
+        style: aiStyle,
+        apiKey: aiApiKey.trim(),
+      });
+
+      const groupName = `${aiDestination.trim()}${aiDays}天`;
+      const baseDate = new Date();
+      const createdIds: string[] = [];
+
+      for (const d of days) {
+        const spotRecords: Spot[] = d.spots.map(s => ({
+          id: generateId(),
+          name: s.name,
+          lat: 0,
+          lng: 0,
+          openTime: s.open,
+          closeTime: s.close,
+          durationMin: s.duration,
+          price: s.price,
+          tags: [],
+          notes: [s.tip, s.transit].filter(Boolean).join(' | '),
+        }));
+
+        const totalBudget = spotRecords.reduce((sum, s) => sum + s.price, 0);
+        const itDate = new Date(baseDate);
+        itDate.setDate(baseDate.getDate() + (d.day - 1));
+
+        const it: Itinerary = {
+          id: generateId(),
+          title: `${aiDestination.trim()} 第${d.day}天`,
+          city: aiDestination.trim(),
+          date: itDate.toISOString().slice(0, 10),
+          startTime: '09:00',
+          endTime: '21:00',
+          spots: spotRecords,
+          plan: [],
+          travelers: 1,
+          intensity: aiStyle === 'hard' ? 'hard' : 'medium',
+          totalBudget,
+          transportMode: 'transit',
+          groupName,
+          dayIndex: d.day,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+
+        await db.itineraries.add(it);
+        createdIds.push(it.id);
+      }
+
+      setShowAIModal(false);
+      setAiDestination('');
+      setAiDays(3);
+      await load();
+
+      if (createdIds.length === 1) {
+        onOpen(createdIds[0]);
+      } else {
+        // Expand the new group
+        setExpandedGroups(prev => new Set(prev).add(groupName));
+      }
+    } catch (e: any) {
+      setAiError(e.message || '生成失敗，請重試');
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   // Group itineraries
   const grouped = new Map<string, Itinerary[]>();
@@ -78,6 +174,14 @@ export const List: React.FC<Props> = ({ onNew, onOpen, onPreview }) => {
         >
           <Plus className="w-5 h-5" />
           <span className="font-bold">新增行程</span>
+        </button>
+
+        <button
+          onClick={() => { setShowAIModal(true); setAiError(''); setAiApiKey(getGroqKey()); }}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-brand-light/10 text-brand-light hover:bg-brand-light/20 transition-all"
+        >
+          <Sparkles className="w-5 h-5" />
+          <span className="font-bold">AI 幫我排</span>
         </button>
 
         {itineraries.length === 0 && (
@@ -194,6 +298,149 @@ export const List: React.FC<Props> = ({ onNew, onOpen, onPreview }) => {
           </div>
         )}
       </main>
+
+      {/* AI Modal */}
+      {showAIModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-zinc-900 rounded-2xl border border-zinc-800 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="p-6 space-y-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-brand-light" />
+                  <h2 className="text-xl font-bold text-zinc-100">AI 幫我排行程</h2>
+                </div>
+                <button
+                  onClick={() => setShowAIModal(false)}
+                  className="text-zinc-500 hover:text-zinc-300 text-lg leading-none"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Destination */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">目的地</label>
+                <input
+                  type="text"
+                  value={aiDestination}
+                  onChange={e => setAiDestination(e.target.value)}
+                  placeholder="例如：東京、大阪、台北"
+                  className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-brand-light transition-colors"
+                />
+              </div>
+
+              {/* Days */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">天數</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={1}
+                    max={14}
+                    value={aiDays}
+                    onChange={e => setAiDays(Number(e.target.value))}
+                    className="flex-1 accent-brand-light"
+                  />
+                  <span className="w-12 text-center font-bold text-brand-light">{aiDays} 天</span>
+                </div>
+              </div>
+
+              {/* Budget */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">預算</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { key: 'free', label: '省錢' },
+                    { key: 'mid', label: '正常' },
+                    { key: 'any', label: '不限' },
+                  ].map(b => (
+                    <button
+                      key={b.key}
+                      onClick={() => setAiBudget(b.key as typeof aiBudget)}
+                      className={`py-2.5 rounded-xl text-sm font-bold transition-all ${
+                        aiBudget === b.key
+                          ? 'bg-brand-light text-zinc-900'
+                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      }`}
+                    >
+                      {b.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Style */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">風格</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setAiStyle('hard')}
+                    className={`py-2.5 rounded-xl text-sm font-bold transition-all ${
+                      aiStyle === 'hard'
+                        ? 'bg-red-500 text-white'
+                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                    }`}
+                  >
+                    特種兵 🔥
+                  </button>
+                  <button
+                    onClick={() => setAiStyle('medium')}
+                    className={`py-2.5 rounded-xl text-sm font-bold transition-all ${
+                      aiStyle === 'medium'
+                        ? 'bg-green-500 text-white'
+                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                    }`}
+                  >
+                    輕鬆 😌
+                  </button>
+                </div>
+              </div>
+
+              {/* API Key */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+                  <Key className="w-3 h-3" /> Groq API Key
+                </label>
+                <input
+                  type="password"
+                  value={aiApiKey}
+                  onChange={e => setAiApiKey(e.target.value)}
+                  placeholder="gsk_..."
+                  className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-brand-light transition-colors text-sm"
+                />
+                <p className="text-[11px] text-zinc-600">
+                  金鑰會存在你的瀏覽器裡，不會上傳到伺服器。
+                  <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-brand-light hover:underline">取得金鑰 →</a>
+                </p>
+              </div>
+
+              {aiError && (
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+                  {aiError}
+                </div>
+              )}
+
+              <button
+                onClick={handleAIGenerate}
+                disabled={aiLoading}
+                className="w-full py-3.5 rounded-xl bg-brand-light text-zinc-900 font-bold text-sm hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {aiLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    AI 排程中...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    生成行程
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
