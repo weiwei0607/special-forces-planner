@@ -82,7 +82,7 @@ export const List: React.FC<Props> = ({ onNew, onOpen, onPreview }) => {
           durationMin: s.duration,
           price: s.price,
           tags: [],
-          notes: [s.tip, s.transit].filter(Boolean).join(' | '),
+          notes: [s.arrive ? `抵達：${s.arrive}` : '', s.tip, s.transit].filter(Boolean).join(' | '),
         }));
 
         const totalBudget = spotRecords.reduce((sum, s) => sum + s.price, 0);
@@ -91,7 +91,7 @@ export const List: React.FC<Props> = ({ onNew, onOpen, onPreview }) => {
 
         const it: Itinerary = {
           id: generateId(),
-          title: `${aiDestination.trim()} 第${d.day}天`,
+          title: `${aiDestination.trim()} 第${d.day}天${d.area ? `｜${d.area}` : ''}`,
           city: aiDestination.trim(),
           date: itDate.toISOString().slice(0, 10),
           startTime: '09:00',
