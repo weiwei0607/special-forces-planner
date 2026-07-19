@@ -6,3 +6,5 @@ dist/
 .env.local
 .next/
 .cache/
+.vercel
+tsconfig.tsbuildinfo

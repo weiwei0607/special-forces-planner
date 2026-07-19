@@ -2,6 +2,8 @@
 
 > 極限旅遊最佳化工具 — 用最短時間玩最多景點
 
+**Demo**: https://special-forces-planner.vercel.app
+
 <p align="center">
   <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react" />
   <img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript" />

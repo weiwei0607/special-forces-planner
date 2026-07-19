@@ -2,12 +2,229 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Tactical Operations × Amber Mission Board ──────────────────
+   BG:       #070B09   very dark olive-black
+   Surface:  #0F1410   dark tactical surface
+   Surface-2:#181E18   slightly lighter surface
+   Amber:    #F59E0B   mission alert / gold
+   Border:   rgba(245,158,11,0.10)   amber wire
+   Text:     #EEE8D5   warm off-white (paper + amber tint)
+   ─────────────────────────────────────────────────────────────── */
+
+:root {
+  --op-bg:       #070B09;
+  --op-surface:  #0F1410;
+  --op-surface-2: #181E18;
+  --op-border:   rgba(245,158,11,0.10);
+  --op-border-2: rgba(245,158,11,0.20);
+  --op-amber:    #F59E0B;
+  --op-amber-dim: rgba(245,158,11,0.08);
+  --op-amber-mid: rgba(245,158,11,0.18);
+  --op-green:    #22C55E;
+  --op-red:      #EF4444;
+  --op-text-1:   #EEE8D5;
+  --op-text-2:   rgba(238,232,213,0.55);
+  --op-text-3:   rgba(238,232,213,0.28);
+}
+
 @layer base {
-  html {
-    -webkit-tap-highlight-color: transparent;
-  }
+  html { -webkit-tap-highlight-color: transparent; }
   body {
-    @apply bg-zinc-950 text-zinc-100 antialiased;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
+    @apply antialiased;
+    background: var(--op-bg);
+    color: var(--op-text-1);
+    font-family: 'Noto Sans TC', 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    /* Subtle grid texture */
+    background-image:
+      linear-gradient(rgba(245,158,11,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(245,158,11,0.02) 1px, transparent 1px);
+    background-size: 40px 40px;
   }
+}
+
+/* ── Tactical font ────────────────────────────────────── */
+.font-mono-tactical {
+  font-family: 'Space Mono', 'Courier New', monospace;
+  letter-spacing: 0.04em;
+}
+
+/* ── Op card ──────────────────────────────────────────── */
+.op-card {
+  background: var(--op-surface);
+  border: 1px solid var(--op-border);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5), inset 0 1px 0 rgba(245,158,11,0.06);
+}
+.op-card-2 {
+  background: var(--op-surface-2);
+  border: 1px solid var(--op-border);
+}
+
+/* ── Mission button ───────────────────────────────────── */
+.btn-mission {
+  background: var(--op-amber);
+  color: #0A0600;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 12px;
+  box-shadow: 0 4px 16px rgba(245,158,11,0.35);
+  transition: all 0.15s ease;
+}
+.btn-mission:hover  { filter: brightness(1.10); }
+.btn-mission:active { transform: scale(0.96); }
+
+/* ── Ghost tactical button ────────────────────────────── */
+.btn-op-ghost {
+  background: var(--op-amber-dim);
+  border: 1px solid var(--op-border-2);
+  color: var(--op-amber);
+  font-weight: 700;
+  font-size: 12px;
+  transition: all 0.15s ease;
+}
+.btn-op-ghost:hover { background: var(--op-amber-mid); }
+
+/* ── Tactical input ───────────────────────────────────── */
+.op-input {
+  background: var(--op-surface-2);
+  border: 1px solid var(--op-border);
+  color: var(--op-text-1);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.op-input:focus {
+  outline: none;
+  border-color: rgba(245,158,11,0.4);
+  box-shadow: 0 0 0 3px rgba(245,158,11,0.08);
+}
+.op-input::placeholder { color: var(--op-text-3); }
+
+/* ── Status tags ──────────────────────────────────────── */
+.tag-status-green {
+  background: rgba(34,197,94,0.10);
+  border: 1px solid rgba(34,197,94,0.25);
+  color: #4ADE80;
+}
+.tag-status-amber {
+  background: var(--op-amber-dim);
+  border: 1px solid var(--op-border-2);
+  color: var(--op-amber);
+}
+.tag-status-red {
+  background: rgba(239,68,68,0.10);
+  border: 1px solid rgba(239,68,68,0.25);
+  color: #F87171;
+}
+
+/* ── Scanline separator ───────────────────────────────── */
+.op-divider {
+  border: none;
+  border-top: 1px solid var(--op-border);
+}
+
+/* ── Animations ───────────────────────────────────────── */
+@keyframes op-fade-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes op-slide-up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes op-pulse-amber {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+@keyframes op-scan {
+  from { transform: translateY(-100%); opacity: 0.08; }
+  to   { transform: translateY(100vh); opacity: 0.08; }
+}
+
+@layer utilities {
+  .animate-in        { animation: op-fade-in 0.4s ease-out; }
+  .animate-slide-in-bottom { animation: op-slide-up 0.5s ease-out; }
+  .animate-pulse-amber { animation: op-pulse-amber 1.5s ease-in-out infinite; }
+}
+
+/* ── Scanline overlay ─────────────────────────────── */
+@keyframes op-scan-move {
+  0%   { transform: translateY(0); }
+  100% { transform: translateY(4px); }
+}
+.scanline-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 3px,
+    rgba(0,0,0,0.06) 3px,
+    rgba(0,0,0,0.06) 4px
+  );
+  animation: op-scan-move 0.1s steps(1) infinite;
+}
+
+/* ── Classified stamp ─────────────────────────────── */
+.stamp-classified {
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--op-red);
+  border: 1.5px solid var(--op-red);
+  padding: 2px 8px;
+  border-radius: 2px;
+  opacity: 0.65;
+  display: inline-block;
+  transform: rotate(-3deg);
+}
+
+/* ── Mission priority bar ─────────────────────────── */
+.priority-bar {
+  height: 2px;
+  border-radius: 1px;
+}
+.priority-bar-high {
+  background: linear-gradient(90deg, var(--op-red) 0%, rgba(239,68,68,0.4) 100%);
+}
+.priority-bar-mid {
+  background: linear-gradient(90deg, var(--op-amber) 0%, rgba(245,158,11,0.4) 100%);
+}
+.priority-bar-low {
+  background: linear-gradient(90deg, var(--op-green) 0%, rgba(34,197,94,0.4) 100%);
+}
+
+/* ── HUD corner marker ───────────────────────────── */
+.hud-corner {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-color: var(--op-amber);
+  border-style: solid;
+  opacity: 0.5;
+}
+.hud-corner-tl { top: 4px; left: 4px; border-width: 1.5px 0 0 1.5px; }
+.hud-corner-tr { top: 4px; right: 4px; border-width: 1.5px 1.5px 0 0; }
+.hud-corner-bl { bottom: 4px; left: 4px; border-width: 0 0 1.5px 1.5px; }
+.hud-corner-br { bottom: 4px; right: 4px; border-width: 0 1.5px 1.5px 0; }
+
+/* ── Mission card with side accent ───────────────── */
+.mission-card {
+  background: var(--op-surface);
+  border: 1px solid var(--op-border);
+  border-left: 3px solid var(--op-amber);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5), inset 0 1px 0 rgba(245,158,11,0.04);
+}
+
+/* ── Timeline event dot ──────────────────────────── */
+.tl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--op-amber);
+  border: 2px solid var(--op-bg);
+  box-shadow: 0 0 0 1px var(--op-amber), 0 0 8px rgba(245,158,11,0.40);
+  flex-shrink: 0;
+}
+
+/* ── Amber glow text ─────────────────────────────── */
+.text-amber-glow {
+  color: var(--op-amber);
+  text-shadow: 0 0 12px rgba(245,158,11,0.40);
 }

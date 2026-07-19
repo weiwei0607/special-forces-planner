@@ -3,6 +3,7 @@ import { List } from './pages/List';
 import { Editor } from './pages/Editor';
 import { Preview } from './pages/Preview';
 import { db, generateId, type Itinerary } from './db';
+import { SplashScreen } from './components/SplashScreen';
 
 type View = 'list' | 'editor' | 'preview';
 
@@ -13,7 +14,6 @@ function loadSharedItinerary(): Itinerary | null {
     const encoded = hash.slice('#share='.length);
     const json = decodeURIComponent(atob(encoded));
     const it: Itinerary = JSON.parse(json);
-    // Give it a fresh id so it doesn't overwrite an existing local one
     it.id = generateId();
     it.createdAt = Date.now();
     it.updatedAt = Date.now();
@@ -23,17 +23,25 @@ function loadSharedItinerary(): Itinerary | null {
   }
 }
 
+function shouldShowSplash(): boolean {
+  try {
+    if (sessionStorage.getItem('sfp_splash')) return false;
+    sessionStorage.setItem('sfp_splash', '1');
+    return true;
+  } catch { return false; }
+}
+
 export default function App() {
-  const [view, setView] = useState<View>('list');
+  const [view, setView]         = useState<View>('list');
   const [activeId, setActiveId] = useState<string | null>(null);
   const [shareLoaded, setShareLoaded] = useState(false);
+  const [splash, setSplash]     = useState<boolean>(shouldShowSplash);
 
   useEffect(() => {
     if (shareLoaded) return;
     setShareLoaded(true);
     const shared = loadSharedItinerary();
     if (!shared) return;
-    // Save and open preview
     db.itineraries.put(shared).then(() => {
       setActiveId(shared.id);
       setView('preview');
@@ -41,20 +49,14 @@ export default function App() {
     });
   }, [shareLoaded]);
 
-  const openEditor = (id?: string) => {
-    setActiveId(id || null);
-    setView('editor');
-  };
-
-  const openPreview = (id: string) => {
-    setActiveId(id);
-    setView('preview');
-  };
+  const openEditor = (id?: string) => { setActiveId(id || null); setView('editor'); };
+  const openPreview = (id: string) => { setActiveId(id); setView('preview'); };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      {view === 'list' && <List onNew={() => openEditor()} onOpen={(id) => openEditor(id)} onPreview={(id) => openPreview(id)} />}
-      {view === 'editor' && <Editor id={activeId} onBack={() => setView('list')} onPreview={(id) => openPreview(id)} />}
+    <div className="min-h-screen" style={{ background: 'var(--op-bg)', color: 'var(--op-text-1)' }}>
+      {splash && <SplashScreen onDone={() => setSplash(false)} />}
+      {view === 'list'    && <List onNew={() => openEditor()} onOpen={(id) => openEditor(id)} onPreview={(id) => openPreview(id)} />}
+      {view === 'editor'  && <Editor id={activeId} onBack={() => setView('list')} onPreview={(id) => openPreview(id)} />}
       {view === 'preview' && activeId && <Preview id={activeId} onBack={() => setView('editor')} />}
     </div>
   );
