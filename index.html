@@ -14,7 +14,22 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Noto+Sans+TC:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   </head>
   <body>
-    <div id="root"></div>
+    <style>
+      /* 首屏骨架：JS bundle 載入前就先顯示，React 掛載後會整個被取代 */
+      #boot{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+        gap:18px;background:#070B09;color:#E8A33D;font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif}
+      #boot .ring{width:38px;height:38px;border:2px solid rgba(232,163,61,.22);border-top-color:#E8A33D;
+        border-radius:50%;animation:bspin .9s linear infinite}
+      #boot .t{font-size:.82rem;letter-spacing:.22em}
+      #boot .s{font-size:.72rem;color:#6E7A72;letter-spacing:.06em}
+      @keyframes bspin{to{transform:rotate(360deg)}}
+      @media (prefers-reduced-motion:reduce){#boot .ring{animation:none}}
+    </style>
+    <div id="root"><div id="boot">
+      <div class="ring"></div>
+      <div class="t">MISSION BRIEFING</div>
+      <div class="s">正在載入行程規劃引擎</div>
+    </div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
