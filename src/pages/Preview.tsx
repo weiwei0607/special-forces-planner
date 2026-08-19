@@ -21,7 +21,7 @@ export const Preview: React.FC<Props> = ({ id, onBack }) => {
   const [selectedSpotId, setSelectedSpotId] = useState<string | null>(null);
 
   useEffect(() => {
-    db.itineraries.get(id).then(data => setIt(data ?? null));
+    db.itineraries.get(id).then(data => setIt(data ?? null)).catch(() => setIt(null));
   }, [id]);
 
   if (!it) {

@@ -455,7 +455,7 @@ function SpotFormModal({ initial, onSave, onClose }: { initial: Spot | null; onS
       try {
         const res = await fetch(
           `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchQuery)}&format=json&limit=5&accept-language=zh-TW`,
-          { headers: { 'Accept-Language': 'zh-TW' } }
+          { headers: { 'Accept-Language': 'zh-TW' }, signal: AbortSignal.timeout(8000) }
         );
         const data = await res.json();
         setSearchResults(data || []);
@@ -577,19 +577,21 @@ function BatchImportModal({
   const abortRef = useRef(false);
 
   const handleImport = async () => {
-    const lines = text
+    const MAX_LINES = 100; // Nominatim 有速率限制，太多筆會跑很久甚至讓 IP 被擋
+    const allLines = text
       .split(/[\n,，]/)
       .map(s => s.trim())
       .filter(Boolean);
-    if (lines.length === 0) return;
+    if (allLines.length === 0) return;
+    const lines = allLines.slice(0, MAX_LINES);
 
     setImporting(true);
     setProgress(0);
-    setErrors([]);
+    setErrors(allLines.length > MAX_LINES ? [`已截取前 ${MAX_LINES} 筆，其餘 ${allLines.length - MAX_LINES} 筆請分批匯入`] : []);
     abortRef.current = false;
 
     const imported: Spot[] = [];
-    const errs: string[] = [];
+    const errs: string[] = allLines.length > MAX_LINES ? [`已截取前 ${MAX_LINES} 筆，其餘 ${allLines.length - MAX_LINES} 筆請分批匯入`] : [];
 
     for (let i = 0; i < lines.length; i++) {
       if (abortRef.current) break;
@@ -600,7 +602,7 @@ function BatchImportModal({
         const q = city ? `${query} ${city}` : query;
         const res = await fetch(
           `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&accept-language=zh-TW`,
-          { headers: { 'Accept-Language': 'zh-TW' } }
+          { headers: { 'Accept-Language': 'zh-TW' }, signal: AbortSignal.timeout(8000) }
         );
         const data = await res.json();
         if (data && data.length > 0) {

@@ -14,6 +14,13 @@ function loadSharedItinerary(): Itinerary | null {
     const encoded = hash.slice('#share='.length);
     const json = decodeURIComponent(atob(encoded));
     const it: Itinerary = JSON.parse(json);
+    // 分享連結可能被截斷或手動竄改，補齊缺欄位避免下游 TypeError（白屏）。
+    if (typeof it !== 'object' || it === null) return null;
+    if (!Array.isArray(it.spots)) it.spots = [];
+    if (!Array.isArray(it.plan)) it.plan = [];
+    if (typeof it.title !== 'string') it.title = '未命名行程';
+    if (typeof it.startTime !== 'string') it.startTime = '09:00';
+    if (typeof it.endTime !== 'string') it.endTime = '21:00';
     it.id = generateId();
     it.createdAt = Date.now();
     it.updatedAt = Date.now();
@@ -45,6 +52,8 @@ export default function App() {
     db.itineraries.put(shared).then(() => {
       setActiveId(shared.id);
       setView('preview');
+      window.history.replaceState(null, '', window.location.pathname);
+    }).catch(() => {
       window.history.replaceState(null, '', window.location.pathname);
     });
   }, [shareLoaded]);

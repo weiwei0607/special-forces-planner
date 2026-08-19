@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { db, type Itinerary, type Spot, generateId } from '../db';
 import { MapPin, Plus, Calendar, Users, Zap, ChevronRight, Trash2, Share2, FolderOpen, ChevronDown, Sparkles, Loader2, Key, X } from 'lucide-react';
 import { generateItinerary, getGroqKey, saveGroqKey } from '../utils/groq';
+import { geocodeAddress } from '../utils/geo';
 
 interface Props {
   onNew: () => void;
@@ -22,6 +23,7 @@ export const List: React.FC<Props> = ({ onNew, onOpen, onPreview }) => {
   const [aiApiKey, setAiApiKey] = useState(getGroqKey());
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
+  const [aiProgress, setAiProgress] = useState('');
 
   useEffect(() => { load(); }, []);
 
@@ -54,14 +56,34 @@ export const List: React.FC<Props> = ({ onNew, onOpen, onPreview }) => {
         destination: aiDestination.trim(), days: aiDays,
         budget: aiBudget, style: aiStyle, apiKey: aiApiKey.trim(),
       });
+
+      // AI 只給地址文字，沒有座標。用 Nominatim 逐一補上經緯度，
+      // 不然地圖上所有景點都會疊在 (0,0)（Null Island）。
+      const allSpots = days.flatMap(d => d.spots);
+      const MAX_GEOCODE = 60; // 避免對 Nominatim 打太多請求（有 1req/s 限制）
+      for (let i = 0; i < allSpots.length; i++) {
+        if (i >= MAX_GEOCODE) break;
+        const s = allSpots[i];
+        setAiProgress(`正在定位景點 ${i + 1}/${Math.min(allSpots.length, MAX_GEOCODE)}：${s.name}`);
+        const q = s.address ? `${s.address} ${aiDestination.trim()}` : `${s.name} ${aiDestination.trim()}`;
+        const coord = await geocodeAddress(q);
+        (s as any)._lat = coord?.lat ?? 0;
+        (s as any)._lng = coord?.lng ?? 0;
+        if (i < allSpots.length - 1 && i < MAX_GEOCODE - 1) {
+          await new Promise(r => setTimeout(r, 1100));
+        }
+      }
+      setAiProgress('');
+
       const groupName = `${aiDestination.trim()}${aiDays}天`;
       const baseDate = new Date();
       const createdIds: string[] = [];
       for (const d of days) {
         const spotRecords: Spot[] = d.spots.map(s => ({
-          id: generateId(), name: s.name, lat: 0, lng: 0,
+          id: generateId(), name: s.name, lat: (s as any)._lat ?? 0, lng: (s as any)._lng ?? 0,
           openTime: s.open, closeTime: s.close, durationMin: s.duration, price: s.price,
-          tags: [], notes: [s.arrive ? `抵達：${s.arrive}` : '', s.tip, s.transit].filter(Boolean).join(' | '),
+          tags: [], notes: [s.arrive ? `抵達：${s.arrive}` : '', s.tip, s.transit].filter(Boolean).join(' | ')
+            + (((s as any)._lat ?? 0) === 0 && ((s as any)._lng ?? 0) === 0 ? ' | ⚠️尚未定位，請手動編輯座標' : ''),
         }));
         const totalBudget = spotRecords.reduce((sum, s) => sum + s.price, 0);
         const itDate = new Date(baseDate);
@@ -87,6 +109,7 @@ export const List: React.FC<Props> = ({ onNew, onOpen, onPreview }) => {
       setAiError(e.message || '生成失敗，請重試');
     } finally {
       setAiLoading(false);
+      setAiProgress('');
     }
   }
 
@@ -394,7 +417,7 @@ export const List: React.FC<Props> = ({ onNew, onOpen, onPreview }) => {
               )}
 
               <button onClick={handleAIGenerate} disabled={aiLoading} className="btn-mission w-full py-3.5 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                {aiLoading ? <><Loader2 className="w-4 h-4 animate-spin" />AI 排程中...</>
+                {aiLoading ? <><Loader2 className="w-4 h-4 animate-spin" />{aiProgress || 'AI 排程中...'}</>
                   : <><Sparkles className="w-4 h-4" />生成行程</>}
               </button>
             </div>

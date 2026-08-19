@@ -42,3 +42,22 @@ export function minutesToTime(minutes: number): string {
 export function addMinutes(time: string, minutes: number): string {
   return minutesToTime(timeToMinutes(time) + minutes);
 }
+
+/** Look up a single location on Nominatim. Returns null on any failure (timeout, no match, network error). */
+export async function geocodeAddress(query: string): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&accept-language=zh-TW`,
+      { headers: { 'Accept-Language': 'zh-TW' }, signal: AbortSignal.timeout(8000) }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || data.length === 0) return null;
+    const lat = parseFloat(data[0].lat);
+    const lng = parseFloat(data[0].lon);
+    if (!isFinite(lat) || !isFinite(lng)) return null;
+    return { lat, lng };
+  } catch {
+    return null;
+  }
+}

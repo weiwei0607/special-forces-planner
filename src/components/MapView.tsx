@@ -71,9 +71,22 @@ export const MapView: React.FC<MapViewProps> = ({
       return;
     }
 
+    // 座標仍是 (0,0)（例如 AI 生成後尚未定位成功）的景點不畫在地圖上，
+    // 否則會全部疊在西非外海的 Null Island，看起來像地圖壞掉。
+    const validSpots = spots.filter(s => !(s.lat === 0 && s.lng === 0));
+
     const orderedSpots = plan && plan.length > 0
-      ? plan.map(p => spots.find(s => s.id === p.spotId)).filter(Boolean) as Spot[]
-      : spots;
+      ? plan.map(p => validSpots.find(s => s.id === p.spotId)).filter(Boolean) as Spot[]
+      : validSpots;
+
+    if (orderedSpots.length === 0) {
+      map.setView([25.033, 121.565], 13);
+      if (polylineRef.current) {
+        polylineRef.current.remove();
+        polylineRef.current = null;
+      }
+      return;
+    }
 
     // Create numbered div icons
     orderedSpots.forEach((spot, idx) => {

@@ -1,10 +1,18 @@
 const KEY_STORAGE = 'sf_groq_key';
 
 export function getGroqKey() {
-  return localStorage.getItem(KEY_STORAGE) || '';
+  try {
+    return localStorage.getItem(KEY_STORAGE) || '';
+  } catch {
+    return ''; // 無痕模式等 localStorage 被封鎖的情況
+  }
 }
 export function saveGroqKey(key: string) {
-  localStorage.setItem(KEY_STORAGE, key);
+  try {
+    localStorage.setItem(KEY_STORAGE, key);
+  } catch {
+    // 存不了就算了，金鑰輸入框當次還是能用
+  }
 }
 
 export interface AISpot {
@@ -92,19 +100,28 @@ export async function generateItinerary(params: {
 
 共生成 ${days} 天完整行程，每天景點數量符合上述風格定義。`;
 
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.6,
-      max_tokens: 8192,
-    }),
-  });
+  let res: Response;
+  try {
+    res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.6,
+        max_tokens: 8192,
+      }),
+      signal: AbortSignal.timeout(45000),
+    });
+  } catch (e: any) {
+    if (e.name === 'TimeoutError' || e.name === 'AbortError') {
+      throw new Error('AI 服務逾時，請稍後再試');
+    }
+    throw new Error('無法連線到 AI 服務，請檢查網路連線');
+  }
 
   if (!res.ok) {
     const err = await res.text();
